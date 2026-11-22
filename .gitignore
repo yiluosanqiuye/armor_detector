@@ -3,3 +3,5 @@ cmake-build-*/
 *.exe
 *.o
 /input.png
+output/*.avi
+output/frame_*.png

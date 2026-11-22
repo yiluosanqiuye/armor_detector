@@ -10,8 +10,7 @@ using namespace std;
 const float PI=CV_PI;
 
 
-//类
-
+//灯条
 class Light {
 public:
     string color="unknown";
@@ -27,12 +26,8 @@ private:
     void get_color(const Mat &image);
 };
 
-vector<pair<int,int>> get_pairlights(const vector<Light> &lights);
 
-
-
-
-
+//装甲板
 class Armor {
 public:
     string color="unknown";
@@ -49,12 +44,8 @@ public:
     void print_information()const;
 };
 
-void delete_repeat_armors(vector<Armor> &armors);
 
-
-
-
-
+//照片
 class Photo {
 public:
     Mat flipped(const Mat &image);
@@ -66,11 +57,6 @@ public:
 };
 
 
-
-//功能函数
-
-array<Point2f, 4> get_rect_corners(const RotatedRect &r);
-float get_angle(const RotatedRect &r);
 
 
 

@@ -1,5 +1,6 @@
 #include <windows.h>
 #include "armor.h"
+#include "video.h"
 #include <filesystem>
 
 
@@ -11,7 +12,10 @@ int main(int argc,char *argv[]) {
     //创建output目录（如果不存在的话）
     filesystem::create_directories("output");
 
-
+    //视频分支
+    if (filesystem::path(imagePath).extension()==".avi") {
+        return run_video(imagePath);
+    }
 
 
     //1.读图并检查

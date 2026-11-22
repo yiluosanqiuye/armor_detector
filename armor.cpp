@@ -1,7 +1,15 @@
 #include "armor.h"
 
+//文件内部辅助函数的前置声明
+static bool can_pair(const Light &l1, const Light &l2);
+static float get_angle(const RotatedRect &r);
+static array<Point2f, 4> get_rect_corners(const RotatedRect &r);
+static vector<pair<int, int>> get_pairlights(const vector<Light> &lights);
+static void delete_repeat_armors(vector<Armor> &armors);
+
 //-----------------------------------------主流程函数-----------------------------------------------------
 
+// 图片翻转
 Mat Photo::flipped(const Mat &image) {
     Mat image_flipped;
 
@@ -10,6 +18,7 @@ Mat Photo::flipped(const Mat &image) {
 }
 
 
+// 获取mask
 Mat Photo::get_mask(const Mat &image) {
     Mat gray, blurred, mask;
 
@@ -21,6 +30,7 @@ Mat Photo::get_mask(const Mat &image) {
 }
 
 
+// 形态学处理mask
 Mat Photo::mask_morphology(const Mat &mask) {
     Mat kernel = getStructuringElement(MORPH_RECT, Size(1, 3));
 
@@ -32,6 +42,7 @@ Mat Photo::mask_morphology(const Mat &mask) {
 }
 
 
+// 灯条类的构造函数
 Light::Light(const RotatedRect &r,const Mat &image): rect(r), center(r.center) {
     long_side  = max(r.size.width, r.size.height);
     short_side = min(r.size.width, r.size.height);
@@ -40,6 +51,7 @@ Light::Light(const RotatedRect &r,const Mat &image): rect(r), center(r.center) {
 }
 
 
+// 获取灯条
 vector<Light> Photo::get_lights(const Mat &mask,const Mat &image) {
     //准备存放轮廓的数组和mask
     vector<vector<Point>> contours;
@@ -48,12 +60,12 @@ vector<Light> Photo::get_lights(const Mat &mask,const Mat &image) {
     //收集轮廓
     findContours(mask_clone, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
-    //收集所有灯带
+    //收集所有灯条
     vector<Light> lights;
     for ( const auto& contour : contours) {
         //1.面积筛选
         double area=contourArea(contour);
-        cout << "候选面积：" << area << endl;
+        // cout << "候选面积：" << area << endl;
         if (area<30||area>2000) {
             continue;
         }
@@ -68,16 +80,17 @@ vector<Light> Photo::get_lights(const Mat &mask,const Mat &image) {
             continue;
         }
 
-        //收集灯带信息
+        //收集灯条信息
         Light l(c_rect,image);
         lights.push_back(l);
     }
 
-    cout << "灯条候选数: " << lights.size() << endl;
+    // cout << "灯条候选数: " << lights.size() << endl;
     return lights;
 }
 
 
+// 绘制灯条候选图
 void Photo::draw_lights( Mat &canva, const vector<Light> &lights) {
 
     for (int i = 0; i < (int)lights.size(); i++) {
@@ -97,7 +110,8 @@ void Photo::draw_lights( Mat &canva, const vector<Light> &lights) {
 }
 
 
-bool can_pair(const Light &l1, const Light &l2) {
+// 设置灯条配对条件
+static bool can_pair(const Light &l1, const Light &l2) {
     //a.颜色一致（允许有一方不确定）
     if (l1.color != l2.color &&
         l1.color != "unknown" && l2.color != "unknown") {
@@ -133,10 +147,10 @@ bool can_pair(const Light &l1, const Light &l2) {
 }
 
 
-
-vector<pair<int, int>> get_pairlights(const vector<Light> &lights) {
+// 获取配对好的灯条组
+static vector<pair<int, int>> get_pairlights(const vector<Light> &lights) {
     vector<pair<int, int>> pairlights;
-    //记录灯带的配对情况，先初始化全部未配对
+    //记录灯条的配对情况，先初始化全部未配对
     vector<bool> used(lights.size(), false);
 
     for (int i = 0; i < (int)lights.size(); i++) {
@@ -165,12 +179,13 @@ vector<pair<int, int>> get_pairlights(const vector<Light> &lights) {
 }
 
 
+// 装甲板类的构造函数
 Armor::Armor( const Light &l1, const Light &l2,int left_id,int right_id,const Mat &image) {
-    // 1.获得构成灯带的编号
+    // 1.获得构成灯条的编号
     left_light_id  = left_id;
     right_light_id = right_id;
 
-    // 2.由8个灯带顶点确定最小外接矩形
+    // 2.由8个灯条顶点确定最小外接矩形
     vector<Point2f> pts(8);
     l1.rect.points(&pts[0]);
     l2.rect.points(&pts[4]);
@@ -182,7 +197,7 @@ Armor::Armor( const Light &l1, const Light &l2,int left_id,int right_id,const Ma
     center  = pairlights_rect.center;
     corners = get_rect_corners(pairlights_rect);
 
-    // 4.获得装甲板颜色（允许一条灯带颜色未知）
+    // 4.获得装甲板颜色（允许一条灯条颜色未知）
     if      (l1.color==l2.color)    color=l1.color;
     else if (l1.color == "unknown") color = l2.color;
     else if (l2.color == "unknown") color = l1.color;
@@ -193,7 +208,8 @@ Armor::Armor( const Light &l1, const Light &l2,int left_id,int right_id,const Ma
 }
 
 
-void delete_repeat_armors(vector<Armor> &armors) {
+// 去除重复识别的装甲板
+static void delete_repeat_armors(vector<Armor> &armors) {
     vector<Armor> keep;
 
     for (const Armor &a:armors) {
@@ -219,6 +235,7 @@ void delete_repeat_armors(vector<Armor> &armors) {
 }
 
 
+// 绘制装甲板检测图
 void Photo::draw_armor(Mat &canva,const Armor &armor) {
 
     // 1.画外接框
@@ -240,6 +257,7 @@ void Photo::draw_armor(Mat &canva,const Armor &armor) {
 }
 
 
+// 打印装甲板信息
 void Armor::print_information() const{
     cout << "===== 装甲板 =====" << endl;
     cout << "颜色：" << color << endl;
@@ -261,6 +279,7 @@ void Armor::print_information() const{
 
 //---------------------------------------其他函数-------------------------------------------------------
 
+// 获取灯条颜色
 void Light::get_color(const Mat &image) {
 
     color="unknown";
@@ -314,7 +333,8 @@ void Light::get_color(const Mat &image) {
 }
 
 
-array<Point2f, 4> get_rect_corners(const RotatedRect &r) {
+// 获取矩形的四个角点（并按顺序排列）
+static array<Point2f, 4> get_rect_corners(const RotatedRect &r) {
     // 1.先得到两个边的单位向量作为方向基准
     float th = r.angle * PI / 180.f;
     Point2f width_dir(cos(th), sin(th));
@@ -340,7 +360,7 @@ array<Point2f, 4> get_rect_corners(const RotatedRect &r) {
 }
 
 
-
+// 检测装甲板有效性
 void Armor::check_valid(const Mat &image) {
     valid = false;
 
@@ -370,14 +390,15 @@ void Armor::check_valid(const Mat &image) {
 }
 
 
-float get_angle(const RotatedRect &r) {
+// 得到矩形的角度（长轴与竖直方向夹角）
+static float get_angle(const RotatedRect &r) {
     //把旋转矩形的角度转成弧度，并定义width和height两个方向上的单位向量
     float th = r.angle * PI / 180.f;
     Point2f width_dir(cos(th), sin(th));
-    Point2f heigth_dir(cos(th+PI/2), sin(th+PI/2));
+    Point2f heigtht_dir(cos(th+PI/2), sin(th+PI/2));
 
     //长边为长轴
-    Point2f longdir=(r.size.width >= r.size.height)?width_dir:heigth_dir;
+    Point2f longdir=(r.size.width >= r.size.height)?width_dir:heigtht_dir;
 
     //统一让长轴方向指向“下”
     if (longdir.y < 0) longdir = -longdir;
@@ -392,14 +413,14 @@ float get_angle(const RotatedRect &r) {
 
 //---------------------------------------单帧检测接口---------------------------------------------------
 vector<Armor> detect_armors(const Mat &image, DetectDebug *debug) {
-    Photo demo;
+    Photo photo;
 
     //1.mask
-    Mat mask            = demo.get_mask(image);
-    Mat mask_morphology = demo.mask_morphology(mask);
+    Mat mask            = photo.get_mask(image);
+    Mat mask_morphology = photo.mask_morphology(mask);
 
     //2.灯条
-    vector<Light> lights = demo.get_lights(mask_morphology, image);
+    vector<Light> lights = photo.get_lights(mask_morphology, image);
 
     //3.调试信息交给调用方
     if (debug!=nullptr) {
