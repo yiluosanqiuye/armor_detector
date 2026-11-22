@@ -1,4 +1,4 @@
-#include "armor.h"
+#include "detector.h"
 
 //文件内部辅助函数的前置声明
 static bool can_pair(const Light &l1, const Light &l2);

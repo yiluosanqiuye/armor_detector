@@ -1,5 +1,5 @@
 #include "video.h"
-#include "armor.h"
+#include "detector.h"
 #include "pose.h"
 
 #include <opencv2/opencv.hpp>
