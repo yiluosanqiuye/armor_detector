@@ -55,10 +55,9 @@ Light::Light(const RotatedRect &r,const Mat &image): rect(r), center(r.center) {
 vector<Light> Photo::get_lights(const Mat &mask,const Mat &image) {
     //准备存放轮廓的数组和mask
     vector<vector<Point>> contours;
-    Mat mask_clone=mask.clone();
 
     //收集轮廓
-    findContours(mask_clone, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    findContours(mask, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     //收集所有灯条
     vector<Light> lights;

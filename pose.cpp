@@ -40,7 +40,7 @@ static const Mat DIST = (Mat_<double>(1, 5) <<
 Pose estimate_pose(const array<Point2f, 4> &corners) {
     Pose pose;
 
-    //1.将装甲板角点转成Point2d类型
+    //1.转换装甲板角点类型以便pnp解算
     vector<Point2d> plate_image_points;
     for (int i = 0; i < 4; i++) {
         plate_image_points.emplace_back(corners[i]);
@@ -49,14 +49,14 @@ Pose estimate_pose(const array<Point2f, 4> &corners) {
 
     //2.solvePnP-解位姿
     Mat rvec,tvec;
-    bool ok = solvePnP(OBJECT_POINTS, plate_image_points, K, DIST, rvec, tvec);
+    bool pnp_ok = solvePnP(OBJECT_POINTS, plate_image_points, K, DIST, rvec, tvec);
 
-    if (!ok) {
+
+    // 3.确认位姿的有效性
+    if (pnp_ok==false) {
         return pose;                        // solvePnP解算失败，valid保持false
     }
 
-
-    //3.检查是否都是有效数值
     for (int i = 0; i < 3; i++) {
         if (!isfinite(tvec.at<double>(i)) || !isfinite(rvec.at<double>(i))) {
             return pose;                    // 非有限数值结果，valid保持false
@@ -68,7 +68,7 @@ Pose estimate_pose(const array<Point2f, 4> &corners) {
     }
 
 
-    //4.记录结果
+    //4.记录位姿信息
     pose.valid    = true;
     pose.tvec     = Vec3d(tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2));
     pose.rvec     = Vec3d(rvec.at<double>(0), rvec.at<double>(1), rvec.at<double>(2));
@@ -81,6 +81,7 @@ Pose estimate_pose(const array<Point2f, 4> &corners) {
 
     double sum_error = 0.0;
     for (int i = 0; i < 4; i++) {
+        pose.reproject_corners[i] = plate_reproject_points[i];
         sum_error += norm(plate_reproject_points[i] - plate_image_points[i]);
     }
     pose.reproject_error = sum_error / 4.0;          //算四个角点平均像素误差

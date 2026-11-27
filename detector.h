@@ -20,6 +20,7 @@ public:
     RotatedRect rect;
     Point2f center;
 
+    Light(){};
     Light(const RotatedRect &r,const Mat &image);
 
 private:
@@ -38,6 +39,7 @@ public:
     array<Point2f, 4> corners;   // 0左上 1右上 2右下 3左下
     bool valid=false;                  //是否有效
 
+    Armor(){};
     Armor(const Light &l1, const Light &l2,int left_id,int right_id,const Mat &image);
 
     void check_valid(const Mat &image);

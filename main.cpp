@@ -12,12 +12,14 @@ int main(int argc,char *argv[]) {
     //创建output目录（如果不存在的话）
     filesystem::create_directories("output");
 
-    //视频分支
-    if (filesystem::path(imagePath).extension()==".avi") {
-        return run_video(imagePath);
-    }
+
+    //------------------------------视频分支-----------------------------------------
+     if (filesystem::path(imagePath).extension()==".avi") {
+         return run_video(imagePath);
+     }
 
 
+    //------------------------------静态图分支-----------------------------------------
     //1.读图并检查
     Mat input = imread(imagePath);
     if (input.empty()) {
@@ -31,16 +33,12 @@ int main(int argc,char *argv[]) {
     imwrite("output/input.png",input);
 
 
-
-
     //2.单帧检测
     Photo demo;
     Mat image=demo.flipped(input);
 
     DetectDebug debug;
     vector<Armor> armors = detect_armors(image,&debug);
-
-
 
 
     //3.保存调试图
@@ -52,8 +50,6 @@ int main(int argc,char *argv[]) {
     imwrite("output/lights.png", lights_canva);
 
 
-
-    
     //4.画图、打印
     Mat canva = image.clone();
 

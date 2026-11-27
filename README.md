@@ -12,9 +12,9 @@ RoboMaster 前哨站画面中装甲板的传统视觉检测与位姿解算程序
 | 模式 | 输入 | 输出 |
 | --- | --- | --- |
 | **静态图模式** | 单张彩色图片 | 若干调试图 + 最终结果图 |
-| **视频模式** | 一段视频文件 | 带标注的结果视频 + 逐帧位姿 CSV |
+| **视频模式** | 一段 AVI 视频 | 带标注的结果视频、逐帧位姿 CSV 和重投影验证图 |
 
-运行模式由**输入文件的扩展名**自动判断（`.avi` / `.mp4` 走视频模式，其他走静态图模式）。
+程序根据输入文件的扩展名选择模式。当前入口将小写 `.avi` 交给视频流程，其余路径交给 `imread()`。
 
 ---
 
@@ -32,8 +32,8 @@ RoboMaster 前哨站画面中装甲板的传统视觉检测与位姿解算程序
 
 > **关于视频后端**
 > 若 `VideoCapture` 打开失败，通常是本机 OpenCV 编译时未启用 FFmpeg。
-> 视频打不开时程序会打印当前 OpenCV 的视频后端列表，便于定位。
-> 解决方法：使用官方预编译版（自带 FFmpeg），或自编译时加 `-DWITH_FFMPEG=ON`。
+> 程序优先尝试 FFmpeg，再尝试默认后端。两者都失败时会输出 OpenCV 构建信息中的视频后端部分。
+> 使用 MinGW 预编译或自编译版本时，请确认 OpenCV 和运行时依赖版本匹配。本机使用的 DLL 目录为 `D:\opencv_work\build\install\x64\mingw\bin`，通过运行配置的 `PATH` 加载。
 
 ## 编译
 
@@ -47,17 +47,17 @@ cmake --build .
 
 ## 运行
 
-必须在**项目根目录**下运行，因为程序使用相对路径：
+以下命令以项目根目录为工作目录，使用 CLion 默认的 `cmake-build-debug` 构建目录。程序将输出写到工作目录下的 `output/`。
 
-```bash
+```powershell
 # 静态图模式（默认图片）
-armor_detector.exe
+.\cmake-build-debug\armor_detector.exe
 
 # 静态图模式（指定图片）
-armor_detector.exe images/other.png
+.\cmake-build-debug\armor_detector.exe images/outpost_frame.png
 
 # 视频模式
-armor_detector.exe videos/outpost.avi
+.\cmake-build-debug\armor_detector.exe videos/outpost.avi
 ```
 
 路径也可以写绝对路径。静态图模式会弹出 `image` 和 `result` 两个窗口，按任意键退出；
@@ -79,9 +79,10 @@ armor_detector.exe videos/outpost.avi
 
 | 文件 | 内容 |
 | --- | --- |
-| `output/result.avi` | 标注结果视频（MJPG 编码，尺寸/帧率/帧数与原视频一致） |
+| `output/result.mp4` | MP4 标注视频，采用 MPEG-4 Part 2（`mp4v`）编码，按输入帧率和顺序写出已处理的帧 |
 | `output/pose_log.csv` | **逐帧位姿数据**，见下文说明 |
 | `output/frame_*.png` | 每 333 帧抽取一张的结果图，用于人工检查 |
+| `output/reproject_*.png` | 抽样帧包含有效位姿时保存，红色实心点是检测角点，绿色空心圈是重投影角点 |
 
 结果视频上标注：`#0` 候选编号、候选框、四角点编号 `0~3`，以及左上角固定信息面板：
 
@@ -98,7 +99,7 @@ candidates: 1
 | 文件 | 职责 |
 | --- | --- |
 | `main.cpp` | 程序入口，按扩展名分发到图片或视频模式 |
-| `armor.cpp / .h` | 检测算法：`Light` / `Armor` / `Photo` 与 `detect_armors` |
+| `detector.cpp / .h` | 检测算法：`Light` / `Armor` / `Photo` 与 `detect_armors` |
 | `video.cpp / .h` | 视频流程：读帧、调检测、画标注、写视频与 CSV |
 | `pose.cpp / .h` | 位姿解算：`solvePnP` + 重投影误差 |
 
@@ -148,7 +149,8 @@ struct Pose {
     cv::Vec3d tvec;           // 位置（米）
     cv::Vec3d rvec;           // 朝向（罗德里格斯向量，弧度）
     double    distance;       // 直线距离（米）
-    double    reproject_error;// 重投影误差（像素）
+    double    reproject_error; // 重投影误差（像素）
+    std::array<cv::Point2d, 4> reproject_corners; // 四个重投影角点
 };
 ```
 
@@ -210,6 +212,8 @@ reprojection_error = (e_0 + e_1 + e_2 + e_3) / 4
 
 **重投影误差小只说明"角点、模型、位姿三者自洽"，不能单独证明真实距离准确。**
 
+程序对每个成功解算的候选检查平均误差。超过 `0.50 px` 时在终端打印帧号、候选编号和实际误差，CSV 保留该候选的数据。
+
 ---
 
 ## 逐帧数据（pose_log.csv）
@@ -221,7 +225,7 @@ reprojection_error = (e_0 + e_1 + e_2 + e_3) / 4
 | --- | --- |
 | `frame_id` | 帧号，从 0 开始 |
 | `time_s` | 视频时间 `frame_id / fps`（秒） |
-| `candidate_id` | 同一帧内的候选编号（按中心 x 从小到大），跨帧无意义 |
+| `candidate_id` | 帧内编号，从 0 开始，按中心 `x` 升序，`x` 相同时按 `y` 升序 |
 | `detect_valid` | 是否得到可用的四角点（1/0） |
 | `pnp_valid` | 位姿解算是否成功（1/0） |
 | `tx_m / ty_m / tz_m` | 位置（米） |
@@ -262,12 +266,12 @@ reprojection_error = (e_0 + e_1 + e_2 + e_3) / 4
 
 顺序由**构造**保证，而不是对顶点排序：
 
-1. 由 `RotatedRect` 角度得到宽边方向 `u = (cosθ, sinθ)`
-2. 取垂直方向 `v`，按尺寸判断哪条是长轴
-3. 强制长轴指向下方，消除"同一方向两种表示"的 180° 歧义
-4. 从中心按 `中心 ± u·半宽 ± v·半高` 四种组合直接算出四角
+1. 由 `RotatedRect` 的角度得到两条互相垂直的边方向。
+2. 选更接近图像水平的一条作为横轴 `u`，统一指向右方。
+3. 由 `u` 得到朝下的垂直轴 `v`，两轴各自使用对应矩形边长的一半。
+4. 从中心按 `中心 ± u·半宽 ± v·半高` 的四种组合直接算出四角。
 
-因为不依赖坐标大小排序，目标倾斜时语义不会翻转，可直接作为 `solvePnP` 的图像点输入。
+这套顺序用于本视频中的候选，并与 `solvePnP` 的四个模型点逐一对应。
 
 ---
 
@@ -278,8 +282,10 @@ reprojection_error = (e_0 + e_1 + e_2 + e_3) / 4
 | 图片读取失败 | 打印路径与提示，返回码 1 |
 | 视频打开失败 | 依次尝试 FFmpeg 与默认后端，都失败则打印后端列表并返回 1 |
 | 视频宽高/fps 读取失败 | 回退到 1280×1024 / 120 fps，并打印警告 |
+| 实际帧尺寸与标定不符 | 打印帧号和实际尺寸，在进入位姿解算前退出 |
 | 结果视频创建失败 | 打印提示，返回 1 |
 | 读到空帧 | 打印帧号并停止处理 |
+| 实际处理帧数少于视频报告值 | 排除调试帧数上限后提示疑似提前结束，并报告最后成功处理的帧号 |
 | 未检测到装甲板 | 视频模式：CSV 写 `detect_valid=0` 的一行，面板显示 `candidates: 0` |
 | 位姿解算失败或深度为负 | `pnp_valid=0`，位姿字段留空，不影响后续帧 |
 
@@ -308,3 +314,9 @@ reprojection_error = (e_0 + e_1 + e_2 + e_3) / 4
 tz 范围：2.593 ~ 3.110 米，平均 2.727 米
 重投影误差：约 0.19 像素（单帧示例）
 ```
+
+## 第二阶段验收材料
+
+实验数据、阈值依据、异常输入测试和最终回归结果见[进展记录](docs/进展记录.md#八第二阶段验收记录2026-11-25)，问题与排查过程见[问题记录](docs/问题记录.md#第二阶段问题记录)。
+
+提交材料包括 CMake 工程和源码、运行说明与记录，以及 `result.mp4`、`pose_log.csv` 和第 0、666、1332、2331、3330 帧的五张验证图。可将标注视频作为结果文件随提交材料一并提供。

@@ -10,7 +10,9 @@ struct Pose {
     cv::Vec3d  tvec{0, 0, 0};
     cv::Vec3d  rvec{0, 0, 0};
     double     distance        = 0.0;     //相机光心到装甲中心的三维斜距
-    double     reproject_error = 0.0;
+
+    std::array<cv::Point2d, 4> reproject_corners{};
+    double                     reproject_error = 0.0;
 };
 
 //输入四个角点，返回位姿
